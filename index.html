@@ -9,6 +9,8 @@
     --bg:#0e1116; --panel:#151a21; --line:#262f3a; --ink:#e6edf3;
     --dim:#8b98a5; --acc:#7ee0c0; --bad:#ff8fa3;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --w1:#7ee0c0; --w2:#8ab4ff; --w3:#f0b866; --w4:#c9a2ff;
+    --w5:#ff9fb4; --w6:#a8e05f;
   }
   body{margin:0;background:var(--bg);color:var(--ink);
        font:16px/1.5 var(--mono);display:grid;place-items:center;min-height:100vh;padding:24px}
@@ -26,6 +28,7 @@
   .out{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:18px}
   .phrase{font-size:20px;line-height:1.6;word-break:break-all;user-select:all;
           min-height:1.6em}
+  .phrase .w{color:var(--w1)}
   .phrase .h{color:var(--acc)}
   hr{border:0;border-top:1px solid var(--line);margin:16px 0}
   dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:13px}
@@ -1379,14 +1382,19 @@ const SETS = [
   [..."123456789"]                 // 9
 ];
 
+// single pass, so letters flipped up are not flipped straight back down
+const CASE_FLIP = s => s.replace(/[a-zA-Z]/g,
+  c => c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase());
+
 // slot -> digit index dropped. 1235 -> 235, 135, 125, 123.
+// case is swapped in the two letter slots, so 1235 prints *Qh7, not *qH7.
 function hashOf(code){
   const d = code.split("").map(Number);
-  return SETS.map((chars, slot) => {
+  return CASE_FLIP(SETS.map((chars, slot) => {
     const kept = d.filter((_, i) => i !== slot);
     const n = kept[0]*36 + kept[1]*6 + kept[2];
     return chars[n % chars.length];
-  }).join("");
+  }).join(""));
 }
 
 /* ---- list ------------------------------------------------------------ */
@@ -1410,6 +1418,11 @@ const code4 = () => [roll(), roll(), roll(), roll()].join("");
 /* ---- output ---------------------------------------------------------- */
 const $ = id => document.getElementById(id);
 
+/* colour is fixed by position: token i always gets PALETTE[i % 6], so the
+   pattern is identical on every generate and adjacent tokens never collide */
+const PALETTE = ["--w1", "--w2", "--w3", "--w4", "--w5", "--w6"];
+const tint = i => ` style="color:var(${PALETTE[i % PALETTE.length]})"`;
+
 function generate(){
   const n = +$("n").value;
   const picks = Array.from({ length: n }, () => ENTRIES[randBelow(ENTRIES.length)]);
@@ -1418,7 +1431,8 @@ function generate(){
   const phrase = picks.map(p => p.word).join(".") + hash;
 
   $("phrase").innerHTML =
-    picks.map(p => p.word).join(".") + `<span class="h">${esc(hash)}</span>`;
+    picks.map((p, i) => `<span class="w"${tint(i)}>${esc(p.word)}</span>`).join(".")
+      + `<span class="h"${tint(n)}>${esc(hash)}</span>`;
   $("rwords").textContent = picks.map(p => p.word).join("  ");
   $("rcodes").textContent = picks.map(p => p.code).join(" ");
   $("rcode").textContent  = hcode;
@@ -1442,8 +1456,8 @@ $("copy").addEventListener("click", async () => {
 const bad = [];
 if (ENTRIES.length !== 1296) bad.push("count");
 if (new Set(ENTRIES.map(e => e.word)).size !== 1296) bad.push("dup word");
-if (hashOf("1235") !== "*qH7") bad.push("1235");
-if (hashOf("1111") !== "@xX8") bad.push("1111");
+if (hashOf("1235") !== "*Qh7") bad.push("1235");
+if (hashOf("1111") !== "@Xx8") bad.push("1111");
 const st = $("status");
 if (bad.length){ st.textContent = "selftest FAIL: " + bad.join(", "); st.className = "bad"; }
 else { st.textContent = `${ENTRIES.length} words loaded \u00b7 selftest pass`; st.className = "ok"; }

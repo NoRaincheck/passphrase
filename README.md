@@ -14,6 +14,8 @@ errors. Runs offline, in the browser, from `file://` or from a static host.
 - **1296 words** — the full `6 × 6 × 6 × 6` taxonomy, no dictionary of obscure words.
 - **Uniform sampling** — `crypto.getRandomValues` with rejection sampling, so there is no modulo bias.
 - **Checker hash** — 4 extra characters that flag a mistyped or dropped word.
+- **Coloured phrase** — every word and the hash are tinted from a fixed palette, so adjacent words
+  are never the same colour.
 - **Visible codes** — each word's taxonomy code is shown next to the phrase, for debugging and audit.
 - **Self-test on load** — the page validates its own wordlist and hash function, and reports pass/fail.
 - **Zero footprint** — the whole tool is `index.html`. The wordlist is embedded, so there is no fetch.
@@ -66,7 +68,7 @@ the copy in `index.html` is the one actually used at runtime.
 A phrase is written as words joined by `.` plus a 4-character hash:
 
 ```
-marmot.dessert.shingle.trombone*qH7
+marmot.dessert.shingle.trombone*Qh7
                             ^^^^^ checker hash
 ```
 
@@ -86,6 +88,12 @@ what you read back matches what was generated.
 For each slot, drop that slot's digit from the code, read the remaining three digits as a base-6
 number, and take it modulo the charset size. So `1235` gives `235`, `135`, `125`, `123`, producing
 `*qH7`.
+
+**The case of the two letters is then swapped** — each lowercase character becomes uppercase and each
+uppercase character becomes lowercase, while the digit and the symbol are left alone. It is a
+bijection applied inside `hashOf`, so a code always maps to the same string, and the hash printed for
+`1235` is `*Qh7` rather than `*qH7`. To verify a hash, flip the two letters back before looking the
+code up in the table above.
 
 ### Entropy
 
@@ -126,8 +134,8 @@ The page checks itself on every load and prints the result in the footer:
 
 - wordlist is exactly 1296 entries
 - all 1296 words are unique
-- `hashOf("1235") === "*qH7"`
-- `hashOf("1111") === "@xX8"`
+- `hashOf("1235") === "*Qh7"`
+- `hashOf("1111") === "@Xx8"`
 
 A failure shows `selftest FAIL` with the reasons. If you ever see it, do not trust the output — the
 wordlist or the hash function has been edited incorrectly.
