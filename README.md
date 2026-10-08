@@ -11,7 +11,7 @@ transcription errors. Runs offline, in the browser, from `file://` or from a sta
 
 - **1296 words** — the full taxonomy, no dictionary of obscure words.
 - **Uniform sampling** — `crypto.getRandomValues` with rejection sampling, so no modulo bias.
-- **Checker hash** — 6 extra characters that flag a mistyped or dropped word.
+- **Checker hash** — 4 extra characters that flag a mistyped or dropped word.
 - **Coloured phrase** — words and hash are tinted from a fixed palette, so adjacent words never share
   a colour.
 - **Visible codes** — each word's taxonomy code is shown next to the phrase, for debugging and audit.
@@ -60,53 +60,49 @@ you check a word against the tree.
 
 ### The checker hash
 
-A phrase is the words joined by a separator, plus a 6-character hash:
+A phrase is the words joined by a separator, plus a 4-character hash:
 
 ```
-marmot.dessert.shingle.trombone*AwMu1
-                              ^^^^^^ checker hash
+marmot.dessert.shingle.trombone*He6
+                               ^^^^ checker hash
 ```
 
 The hash is computed from a **separate** random 4-digit code — drawn independently of the word picks,
 so it carries no information about which words were chosen. Its only job is to tell you whether what
 you read back matches what was generated.
 
-`hashOf(code)` maps a 4-digit code to 4 characters, one per slot, from four different character sets:
+`hashOf(code)` maps a 4-digit code to 3 characters, one per slot, from three different character sets:
 
 | Slot | Charset | Size |
 | --- | --- | --- |
 | 0 | ``!@#^&*`` | 6 |
-| 1 | two-letter Scrabble words, title case — first half of the list | 36 |
-| 2 | two-letter Scrabble words, title case — second half of the list | 36 |
-| 3 | `123456789` | 9 |
-
-Slots 1 and 2 take **disjoint halves** of the 72-word list, so a single hash can never print the same
-word twice. All 72 words stay reachable across the pair, but never both in the same hash.
+| 1 | two-letter Scrabble words, title case | 72 |
+| 2 | `123456789` | 9 |
 
 Each slot drops its own digit, reads the remaining three as a base-6 number, and takes that modulo the
-charset size. Which digit takes the leading ×36 place matters, because a word slot's modulus of 36
-divides that place away:
+charset size. Which digit takes the leading ×36 place decides what survives the modulus:
 
 | Slot | Drops | Reads | mod | Carries |
 | --- | --- | --- | --- | --- |
 | 0 | `d0` | `d1 d2 d3` | 6 | `d3` |
-| 1 | `d1` | `d2 d0 d3` | 36 | `d0`, `d3` |
-| 2 | `d2` | `d0 d1 d3` | 36 | `d1`, `d3` |
-| 3 | `d3` | `d1 d0 d2` | 9 | `6·d0 + d2` |
+| 1 | `d1` | `d3 d0 d2` | 72 | `d0`, `d2`, parity(`d3`) |
+| 2 | `d2` | `d0 d3 d1` | 9 | `6·d3 + d1` |
 
-Read every slot ascending and each dropped digit lands on the ×36 place, where the modulus deletes
-it — `d0` would survive only as *parity*, and the 1296 codes would collapse onto far fewer hashes.
-Permuting the order puts each dropped digit on the ×6 place instead, where it survives. All four
-digits are then recoverable from the four characters: `d3` from slot 0, `d0` and `d1` from slots 1
-and 2, and `d2` from slot 3 once `d0` is known. The map is a bijection, and the self-test asserts
-all 1296 hashes are distinct so this cannot regress silently.
+A digit the slot drops still has to reach the output, and where it lands is the whole game. Read
+ascending everywhere and `d0` lands on the ×36 place in the word slot, where the modulus `72` divides
+it — it survives only as *parity* and the 1296 codes collapse. Permuting the order puts each dropped
+digit on the ×6 place instead, where nothing divides it away.
 
-Every slot stays **perfectly uniform** — each of the 36 words in a word slot, all 9 digits, all 6
-symbols, with every value used equally often.
+All four digits are then recoverable from the three characters: `d3` from slot 0, `d1` from slot 2
+once `d3` is known, and `d0` and `d2` from slot 1. So `hashOf` is still a bijection on the 1296 codes,
+and the self-test asserts all 1296 hashes are distinct so this cannot regress silently.
 
-Slots 1 and 2 print a real word rather than a bare letter: the 72 valid two-letter Scrabble words with
-no `i`, `l`, or `o`, title cased (`Aw`, `Mu`). The words are already title case, so there is no case
-swap. So `1235` prints `*AwMu1` and `1111` prints `@AnGu8`.
+Every slot stays **perfectly uniform** — all 72 words, all 9 digits, all 6 symbols, with every value
+used equally often (each word 18 times across the 1296 codes).
+
+Slot 1 prints a real word rather than a bare letter: the 72 valid two-letter Scrabble words with no
+`i`, `l`, or `o`, title cased (`He`, `Mu`). The words are already title case, so there is no case
+swap. So `1235` prints `*He6` and `1111` prints `@Gu8`.
 
 ### Entropy
 
@@ -147,10 +143,8 @@ The page checks itself on every load and prints the result in the footer:
 
 - wordlist is exactly 1296 entries, and all 1296 words are unique
 - the two-letter hash list is exactly 72 entries, unique, and correctly title cased
-- the two halves are 36 each and share no word
-- `hashOf("1235") === "*AwMu1"` and `hashOf("1111") === "@AnGu8"`
+- `hashOf("1235") === "*He6"` and `hashOf("1111") === "@Gu8"`
 - all 1296 codes produce 1296 **distinct** hashes (the bijection guard)
-- no code prints the same word in both word slots (the doubled-word guard)
 
 A failure shows `selftest FAIL` with the reasons. If you ever see it, do not trust the output — the
 wordlist or the hash function has been edited incorrectly.
