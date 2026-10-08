@@ -25,6 +25,11 @@
          font-weight:600;cursor:pointer}
   button:hover{filter:brightness(1.08)}
   button.ghost{background:var(--panel);color:var(--ink);border-color:var(--line);font-weight:400}
+  .chk{display:inline-flex;align-items:center;gap:7px;color:var(--dim);font-size:13px;
+       background:var(--panel);border:1px solid var(--line);border-radius:7px;
+       padding:8px 12px;cursor:pointer;user-select:none}
+  .chk input{accent-color:var(--acc);width:15px;height:15px;margin:0;cursor:pointer}
+  .chk:has(input:checked){color:var(--ink);border-color:var(--acc)}
   .out{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:18px}
   .phrase{font-size:20px;line-height:1.6;word-break:break-all;user-select:all;
           min-height:1.6em}
@@ -53,6 +58,12 @@
       <option value="3">3</option>
       <option value="4" selected>4</option>
     </select>
+    <label class="chk"><input type="checkbox" id="tc">title case</label>
+    <label for="sep">sep</label>
+    <select id="sep" aria-label="separator">
+      <option value="." selected>.</option>
+      <option value="-">-</option>
+    </select>
     <button type="submit">generate</button>
     <button type="button" class="ghost" id="copy">copy</button>
   </form>
@@ -70,6 +81,7 @@
 
   <div class="foot">
     <span id="status">list: &mdash;</span>
+    <div>title case and sep are display-only &middot; the checker hash is never re-cased</div>
   </div>
 </div>
 
@@ -1423,26 +1435,48 @@ const $ = id => document.getElementById(id);
 const PALETTE = ["--w1", "--w2", "--w3", "--w4", "--w5", "--w6"];
 const tint = i => ` style="color:var(${PALETTE[i % PALETTE.length]})"`;
 
+/* ---- postprocessing ---------------------------------------------------- */
+/* Cosmetic only: these reshape the words already drawn, never reroll them,
+   and never touch the hash -- re-casing it would break the case swap that
+   makes hashOf a bijection on the 4-digit code. */
+const titleCase = s => s.replace(/[a-z]+/g, w => w[0].toUpperCase() + w.slice(1));
+
+/* the last draw, kept so an option change re-renders instead of regenerating */
+let LAST = null;
+
+/* draw new words + hash, then paint */
 function generate(){
   const n = +$("n").value;
   const picks = Array.from({ length: n }, () => ENTRIES[randBelow(ENTRIES.length)]);
   const hcode = code4();
-  const hash = hashOf(hcode);
-  const phrase = picks.map(p => p.word).join(".") + hash;
+  LAST = { words: picks.map(p => p.word), codes: picks.map(p => p.code),
+           hcode, hash: hashOf(hcode) };
+  render();
+}
+
+/* paint LAST through the current options */
+function render(){
+  if (!LAST) return;
+  const sep = $("sep").value;
+  const shown = $("tc").checked ? LAST.words.map(titleCase) : LAST.words;
 
   $("phrase").innerHTML =
-    picks.map((p, i) => `<span class="w"${tint(i)}>${esc(p.word)}</span>`).join(".")
-      + `<span class="h"${tint(n)}>${esc(hash)}</span>`;
-  $("rwords").textContent = picks.map(p => p.word).join("  ");
-  $("rcodes").textContent = picks.map(p => p.code).join(" ");
-  $("rcode").textContent  = hcode;
-  $("rhash").textContent  = hash;
-  $("phrase").dataset.value = phrase;
+    shown.map((w, i) => `<span class="w"${tint(i)}>${esc(w)}</span>`).join(sep)
+      + `<span class="h"${tint(shown.length)}>${esc(LAST.hash)}</span>`;
+  $("rwords").textContent = shown.join("  ");
+  $("rcodes").textContent = LAST.codes.join(" ");
+  $("rcode").textContent  = LAST.hcode;
+  $("rhash").textContent  = LAST.hash;
+  /* the hash rides on the last word with no separator, as before */
+  $("phrase").dataset.value = shown.join(sep) + LAST.hash;
 }
 
 function esc(s){ return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
 
 $("f").addEventListener("submit", e => { e.preventDefault(); generate(); });
+/* option changes only repaint the current draw */
+$("tc").addEventListener("change", render);
+$("sep").addEventListener("change", render);
 $("copy").addEventListener("click", async () => {
   const b = $("copy"), t = b.textContent;
   try {
@@ -1458,6 +1492,7 @@ if (ENTRIES.length !== 1296) bad.push("count");
 if (new Set(ENTRIES.map(e => e.word)).size !== 1296) bad.push("dup word");
 if (hashOf("1235") !== "*Qh7") bad.push("1235");
 if (hashOf("1111") !== "@Xx8") bad.push("1111");
+if (titleCase("polar bear") !== "Polar Bear") bad.push("titleCase");
 const st = $("status");
 if (bad.length){ st.textContent = "selftest FAIL: " + bad.join(", "); st.className = "bad"; }
 else { st.textContent = `${ENTRIES.length} words loaded \u00b7 selftest pass`; st.className = "ok"; }
