@@ -1400,27 +1400,42 @@ PA PE RE SH ST TA TE WE XU YA YE YU ZA
 const TWOS = document.getElementById("twoletter").textContent
   .trim().split(/\s+/).map(w => w[0] + w.slice(1).toLowerCase());
 
+/* ...and each word slot takes a disjoint half of that list, so a single hash
+   can never print the same word twice ("GuGu"). 72 words stay reachable, but
+   only ever one at a time. */
+const HALF = TWOS.length / 2;
+const WORDS_A = TWOS.slice(0, HALF);   // 36, title case
+const WORDS_B = TWOS.slice(HALF);      // 36, title case, no overlap with A
+
 const SETS = [
   [..."!@#^&*"],   // 6
-  TWOS,            // 72, title case
-  TWOS,            // 72, title case
+  WORDS_A,         // 36, title case
+  WORDS_B,         // 36, title case
   [..."123456789"] // 9
 ];
 
 /* Each slot drops its own digit and reads the other three as a base-6 number,
-   but ORDER says which surviving digit takes the leading (x36) place. Slots
-   0-2 read their kept digits in ascending order; slot 3 swaps its first two.
+   but ORDER says which surviving digit takes the leading (x36) place.
 
-   That swap is what keeps the map injective. Read ascending everywhere, d0
-   lands on the x36 place in all three non-zero slots, and 36*2 is a multiple
-   of the 72-word modulus -- so d0 survives only as parity and the 1296 codes
-   collapse to 432 hashes. Rotating slot 3 puts d0 on the x6 place, where the
-   modulus does not divide it, and the map becomes a bijection again.
+   ORDER[slot] = digit indices, most significant first; slot s omits s.
 
-   ORDER[slot] = digit indices, most significant first; slot s omits s. */
-const ORDER = [[1,2,3], [0,2,3], [0,1,3], [1,0,2]];
+   The leading digit has to land somewhere the modulus does not divide away.
+   A word slot has 36 entries, so the x36 place is gone and the leading digit
+   would survive only as parity -- d0 would collapse the 1296 codes onto 432
+   hashes. ORDER is permuted so each digit the slot drops is instead put on
+   the x6 place, where it survives:
 
-// 1235 -> 235, 135, 125, 251. The last is d2 d1 d0, not d0 d1 d2.
+     slot 0  drops d0  reads d1 d2 d3  mod  6  ->  d3
+     slot 1  drops d1  reads d2 d0 d3  mod 36  ->  d0, d3
+     slot 2  drops d2  reads d0 d1 d3  mod 36  ->  d1, d3
+     slot 3  drops d3  reads d1 d0 d2  mod  9  ->  6*d0 + d2
+
+   All four digits are recoverable from the four characters -- d3 from slot 0,
+   d0 and d1 from slots 1 and 2, then d2 from slot 3 once d0 is known -- so
+   the map stays a bijection. The self-test pins that down. */
+const ORDER = [[1,2,3], [2,0,3], [0,1,3], [1,0,2]];
+
+// 1235 -> 235, 315, 125, 213 -> mod 6/36/36/9 -> *AwMu1
 function hashOf(code){
   const d = code.split("").map(Number);
   return SETS.map((chars, slot) => {
@@ -1513,17 +1528,28 @@ if (new Set(ENTRIES.map(e => e.word)).size !== 1296) bad.push("dup word");
 if (TWOS.length !== 72) bad.push("twos count");
 if (new Set(TWOS).size !== 72) bad.push("twos dup");
 if (!TWOS.every(w => /^[A-Z][a-z]$/.test(w))) bad.push("twos case");
-if (hashOf("1235") !== "*PaMu1") bad.push("1235");
-if (hashOf("1111") !== "@GuGu8") bad.push("1111");
+if (WORDS_A.length !== 36 || WORDS_B.length !== 36) bad.push("halves");
+if (WORDS_A.some(w => WORDS_B.includes(w))) bad.push("halves overlap");
+if (hashOf("1235") !== "*AwMu1") bad.push("1235");
+if (hashOf("1111") !== "@AnGu8") bad.push("1111");
 if (titleCase("polar bear") !== "Polar Bear") bad.push("titleCase");
 
 /* the hash must stay a bijection on the 1296-code space: a checker that
-   collides on 3 codes per hash silently stops catching some typos */
+   collides on 3 codes per hash silently stops catching some typos.
+   Note the word slots are two characters each, so word A is h.slice(1,3)
+   and word B is h.slice(3,5) -- h[1] vs h[2] would only compare the two
+   letters inside one word. */
 const HASHES = new Set();
+let doubled = 0;
 for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++)
-  for (let c = 1; c <= 6; c++) for (let e = 1; e <= 6; e++)
-    HASHES.add(hashOf(`${a}${b}${c}${e}`));
+  for (let c = 1; c <= 6; c++) for (let e = 1; e <= 6; e++) {
+    const h = hashOf(`${a}${b}${c}${e}`);
+    HASHES.add(h);
+    if (h.slice(1, 3) === h.slice(3, 5)) doubled++;
+  }
 if (HASHES.size !== 1296) bad.push(`hash not injective (${HASHES.size}/1296)`);
+/* the halves are disjoint, so no code can print the same word twice */
+if (doubled) bad.push(`doubled word (${doubled}/1296)`);
 const st = $("status");
 if (bad.length){ st.textContent = "selftest FAIL: " + bad.join(", "); st.className = "bad"; }
 else { st.textContent = `${ENTRIES.length} words loaded \u00b7 selftest pass`; st.className = "ok"; }
