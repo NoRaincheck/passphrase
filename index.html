@@ -1383,30 +1383,50 @@
 6665	actor
 6666	director
 </script>
+<script type="text/plain" id="twoletter">
+AA AB AD AE AG AH AM AN AR AS AT AW AX AY
+EA ED EE EF EH EM EN ER ES ET EW EX
+UG UH UM UN UP UR US UT
+BA BE BY CH DA DE FA FE FY GU HA HE HM
+JA KA KY MA ME MM MU MY NA NE NU NY
+PA PE RE SH ST TA TE WE XU YA YE YU ZA
+</script>
 <script>
 "use strict";
 
 /* ---- HASHING.md ----------------------------------------------------- */
+/* the two-letter slots print a real word in title case, not a bare letter,
+   so there is no case flip any more and CASE_FLIP is gone */
+const TWOS = document.getElementById("twoletter").textContent
+  .trim().split(/\s+/).map(w => w[0] + w.slice(1).toLowerCase());
+
 const SETS = [
-  [..."!@#^&*"],                   // 6
-  [..."abcdefghjkmnpqrstuvwxyz"],  // 23, no i l o
-  [..."ABCDEFGHJKMNPQRSTUVWXYZ"],  // 23, no I L O
-  [..."123456789"]                 // 9
+  [..."!@#^&*"],   // 6
+  TWOS,            // 72, title case
+  TWOS,            // 72, title case
+  [..."123456789"] // 9
 ];
 
-// single pass, so letters flipped up are not flipped straight back down
-const CASE_FLIP = s => s.replace(/[a-zA-Z]/g,
-  c => c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase());
+/* Each slot drops its own digit and reads the other three as a base-6 number,
+   but ORDER says which surviving digit takes the leading (x36) place. Slots
+   0-2 read their kept digits in ascending order; slot 3 swaps its first two.
 
-// slot -> digit index dropped. 1235 -> 235, 135, 125, 123.
-// case is swapped in the two letter slots, so 1235 prints *Qh7, not *qH7.
+   That swap is what keeps the map injective. Read ascending everywhere, d0
+   lands on the x36 place in all three non-zero slots, and 36*2 is a multiple
+   of the 72-word modulus -- so d0 survives only as parity and the 1296 codes
+   collapse to 432 hashes. Rotating slot 3 puts d0 on the x6 place, where the
+   modulus does not divide it, and the map becomes a bijection again.
+
+   ORDER[slot] = digit indices, most significant first; slot s omits s. */
+const ORDER = [[1,2,3], [0,2,3], [0,1,3], [1,0,2]];
+
+// 1235 -> 235, 135, 125, 251. The last is d2 d1 d0, not d0 d1 d2.
 function hashOf(code){
   const d = code.split("").map(Number);
-  return CASE_FLIP(SETS.map((chars, slot) => {
-    const kept = d.filter((_, i) => i !== slot);
-    const n = kept[0]*36 + kept[1]*6 + kept[2];
+  return SETS.map((chars, slot) => {
+    const n = ORDER[slot].reduce((acc, i) => acc*6 + d[i], 0);
     return chars[n % chars.length];
-  }).join(""));
+  }).join("");
 }
 
 /* ---- list ------------------------------------------------------------ */
@@ -1437,8 +1457,8 @@ const tint = i => ` style="color:var(${PALETTE[i % PALETTE.length]})"`;
 
 /* ---- postprocessing ---------------------------------------------------- */
 /* Cosmetic only: these reshape the words already drawn, never reroll them,
-   and never touch the hash -- re-casing it would break the case swap that
-   makes hashOf a bijection on the 4-digit code. */
+   and never touch the hash -- re-casing it would change the fixed string a
+   code maps to. */
 const titleCase = s => s.replace(/[a-z]+/g, w => w[0].toUpperCase() + w.slice(1));
 
 /* the last draw, kept so an option change re-renders instead of regenerating */
@@ -1490,9 +1510,20 @@ $("copy").addEventListener("click", async () => {
 const bad = [];
 if (ENTRIES.length !== 1296) bad.push("count");
 if (new Set(ENTRIES.map(e => e.word)).size !== 1296) bad.push("dup word");
-if (hashOf("1235") !== "*Qh7") bad.push("1235");
-if (hashOf("1111") !== "@Xx8") bad.push("1111");
+if (TWOS.length !== 72) bad.push("twos count");
+if (new Set(TWOS).size !== 72) bad.push("twos dup");
+if (!TWOS.every(w => /^[A-Z][a-z]$/.test(w))) bad.push("twos case");
+if (hashOf("1235") !== "*PaMu1") bad.push("1235");
+if (hashOf("1111") !== "@GuGu8") bad.push("1111");
 if (titleCase("polar bear") !== "Polar Bear") bad.push("titleCase");
+
+/* the hash must stay a bijection on the 1296-code space: a checker that
+   collides on 3 codes per hash silently stops catching some typos */
+const HASHES = new Set();
+for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++)
+  for (let c = 1; c <= 6; c++) for (let e = 1; e <= 6; e++)
+    HASHES.add(hashOf(`${a}${b}${c}${e}`));
+if (HASHES.size !== 1296) bad.push(`hash not injective (${HASHES.size}/1296)`);
 const st = $("status");
 if (bad.length){ st.textContent = "selftest FAIL: " + bad.join(", "); st.className = "bad"; }
 else { st.textContent = `${ENTRIES.length} words loaded \u00b7 selftest pass`; st.className = "ok"; }
