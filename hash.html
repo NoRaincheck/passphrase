@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hash any string</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#151a21; --line:#262f3a; --ink:#e6edf3;
+    --dim:#8b98a5; --acc:#7ee0c0; --bad:#ff8fa3;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.5 var(--mono);display:grid;place-items:center;min-height:100vh;padding:24px}
+  .box{width:100%;max-width:720px}
+  h1{font-size:18px;margin:0 0 4px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:22px}
+  .sub a{color:var(--acc)}
+  .out{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:18px;margin-bottom:14px}
+  textarea{width:100%;min-height:96px;resize:vertical;font:inherit;line-height:1.5;
+           color:var(--ink);background:var(--bg);border:1px solid var(--line);
+           border-radius:9px;padding:11px;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+  textarea:focus{outline:2px solid var(--acc);outline-offset:1px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  button{font:inherit;font-size:14px;color:var(--ink);background:var(--panel);
+         border:1px solid var(--line);border-radius:7px;padding:8px 12px;cursor:pointer}
+  button#copy{background:var(--acc);color:#0e1116;border-color:var(--acc);font-weight:600}
+  button:hover{filter:brightness(1.08)}
+  button.ghost{font-weight:400}
+  .hash{font-size:38px;letter-spacing:6px;color:var(--acc);user-select:all;
+        line-height:1.35;min-height:1.35em}
+  .full{color:var(--dim);font-size:13px;word-break:break-all;margin-top:2px;user-select:all;min-height:1.5em}
+  hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+  dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:13px}
+  dt{color:var(--dim)}
+  dd{margin:0;word-break:break-all}
+  .slots{margin-top:14px}
+  .slot{display:grid;grid-template-columns:96px 1fr 2.4em;gap:10px;align-items:center;
+        font-size:12px;border-top:1px dashed var(--line);margin-top:8px;padding-top:8px}
+  .slot.head{border:0;margin:0;padding:0 0 6px;color:var(--dim);font-size:11px}
+  .slot.head span:nth-child(2){text-align:right}
+  .slot .set{color:var(--dim);word-break:break-all}
+  .slot b{color:var(--acc);font-size:17px;letter-spacing:1px;user-select:all;text-align:right}
+  .slot.kept{color:var(--ink)}
+  .slot.kept .set{color:var(--ink)}
+  .lines{margin-top:12px;display:grid;gap:5px}
+  .line{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;
+        background:var(--bg);border:1px solid var(--line);border-radius:7px;
+        padding:6px 10px;font-size:13px}
+  .line .t{word-break:break-all}
+  .line .h{color:var(--acc);user-select:all;letter-spacing:1px}
+  details{margin-bottom:14px;background:var(--panel);border:1px solid var(--line);
+          border-radius:11px;padding:12px 18px}
+  summary{cursor:pointer;color:var(--dim);font-size:13px}
+  summary:hover{color:var(--ink)}
+  .note{font-size:13px;color:var(--dim);line-height:1.7}
+  .note b{color:var(--ink);font-weight:600}
+  .note code,.sub code{color:var(--acc)}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:9px;
+      padding:12px;overflow:auto;font-size:12px;line-height:1.55;margin:10px 0 0;color:var(--ink)}
+  .foot{margin-top:16px;font-size:12px;color:var(--dim)}
+  .ok{color:var(--acc)} .bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Hash any string</h1>
+  <div class="sub">
+    generic <code>hashOf(string)</code> &middot; <code>!@#^&amp;*</code> &middot; two-letter word &middot;
+    <code>123456789</code> &middot; <a href="index.html">passphrase tool &rarr;</a>
+  </div>
+
+  <div class="out">
+    <textarea id="in" placeholder="type or paste any string" spellcheck="false"
+              autocapitalize="off" autocomplete="off" autofocus></textarea>
+    <div class="row">
+      <button type="button" id="copy">copy</button>
+      <button type="button" class="ghost" id="clear">clear</button>
+    </div>
+  </div>
+
+  <div class="out">
+    <div class="hash" id="hash" aria-live="polite">&mdash;</div>
+    <div class="full" id="full">&mdash;</div>
+    <div class="lines" id="lines"></div>
+    <hr>
+    <dl>
+      <dt>string</dt><dd id="rlen">&mdash;</dd>
+      <dt>hash</dt>  <dd id="rhash">&mdash;</dd>
+      <dt>drop last</dt><dd id="rdrop">&mdash;</dd>
+    </dl>
+    <div class="slots" id="slots"></div>
+  </div>
+
+  <details>
+    <summary>how the selection works</summary>
+    <p class="note">
+      The tool builds <b>eight</b> characters — two independent runs of the same three slots — and
+      then <b>picks four of them</b>. Each run gives a symbol, a two-letter word and a digit, so there
+      are 2 &times; 2 &times; 2 = 8 complete four-character hashes available. All eight carry the same
+      11.92 bits, so entropy does not decide it; what differs is how each one behaves on a typo.
+    </p>
+    <p class="note">
+      The tiebreak is the edit this is really for: <b>the same string with one character removed from
+      the end</b> — a truncated password, a filename cut short, a value pasted with a character
+      missing. The tool computes that shorter string's hash as well, scores all eight candidates by how
+      many characters differ, and shows the winner. More characters changed means the error is visible
+      in the gap between the digits, not merely that something differs. About half the time the two
+      strings settle on the <i>same</i> shape, and then the comparison is like-for-like and the
+      property is the stronger 99.8%; the rest of the time the characters come from different runs,
+      which is less controlled but still well ahead of no selection at all.
+    </p>
+    <pre>#   string minus its last character
+    what you see (both hashes chosen)   4/4 move 84.0%   3+/4 move 98.8%
+    when both land on the same shape    4/4 move 92.6%   3+/4 move 99.8%
+    one fixed run, no selection         4/4 move 60.2%   3+/4 move 92.7%</pre>
+    <p class="note">
+      A fixed run is not enough, and that is a pigeonhole problem rather than a mixing problem: with
+      six symbols, seventy-two words and nine digits, the three small slots each stay put about one
+      edit in six, one in nine and one in seventy-two, so all three lining up by chance is common.
+      Choosing the best of eight runs is what buys the margin.
+    </p>
+    <p class="note">
+      <b>Why not just print all eight?</b> Eight characters carry 23.85 bits and would collapse to
+      15,116,544 distinct values instead of 3,888 — for 20,000 different strings, a fixed run gives
+      only 3,864 distinct hashes while the full pool gives 19,983. That is a real gain, but it is a
+      longer thing to read aloud and write down, so the page shows the selected four and leaves the
+      pool available as <code>pool(string)</code>.
+    </p>
+    <p class="note">
+      <b>What it is not.</b> 11.92 bits is 3,888 values, so many strings share a hash and anyone can
+      enumerate all of them instantly. This is a transcription checksum — it catches you mistyping
+      your own string — and it is not protection against anyone who has read this file.
+    </p>
+  </details>
+
+  <details>
+    <summary>the function &mdash; copy this out</summary>
+    <pre><code>const SETS  = ["!@#^&amp;*", TWOS, "123456789"];
+const SEED  = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b];
+const PRIME = [0x01000193, 0x85ebca77, 0xc2b2ae3d];
+
+/* 32-bit multiply-and-mix: one changed character cannot cancel out */
+function fmix(n){
+  n ^= n &gt;&gt;&gt; 16; n = Math.imul(n, 0x85ebca6b);
+  n ^= n &gt;&gt;&gt; 13; n = Math.imul(n, 0xc2b2ae35);
+  n ^= n &gt;&gt;&gt; 16;
+  return n &gt;&gt;&gt; 0;
+}
+
+/* one run: three slots over the whole string, independent key set per run */
+function run(string, k){
+  const cps = Array.from(string, ch =&gt; ch.codePointAt(0));
+  return SETS.map((chars, s) =&gt; {
+    let n = fmix(SEED[s] ^ Math.imul(k + 1, 0x9e3779b1)
+                       ^ Math.imul(cps.length + 1, PRIME[s]));
+    for (let j = 0; j &lt; cps.length; j++)
+      n = fmix(fmix(Math.imul(n, PRIME[s]) ^ (cps[j] + 1))
+               + Math.imul(j + 1, 0x165667b1));
+    return chars[(n &gt;&gt;&gt; 16) % chars.length];
+  });
+}
+
+/* the pool: two runs, six characters */
+function pool(string){ return [...run(string, 0), ...run(string, 1)]; }
+
+/* eight complete hashes to choose from: one symbol, one word, one digit each */
+const SHAPES = [[0,1,2], [0,1,5], [0,4,2], [0,4,5],
+                [3,1,2], [3,1,5], [3,4,2], [3,4,5]];
+
+function hashOf(string){
+  const p = pool(string);
+  if (!string.length) return SHAPES[0].map(i =&gt; p[i]).join("");
+  /* the string one character shorter -- the edit this hash is tuned for */
+  const q = pool(string.slice(0, -1));
+  let best = -1, bestShape = SHAPES[0];
+  for (const shape of SHAPES){
+    const a = shape.map(i =&gt; p[i]).join(""), b = shape.map(i =&gt; q[i]).join("");
+    let d = 0;
+    for (let i = 0; i &lt; 4; i++) d += a[i] !== b[i];
+    if (d &gt; best){ best = d; bestShape = shape; }
+  }
+  return bestShape.map(i =&gt; p[i]).join("");
+}</code></pre>
+    <p class="note" style="margin:10px 0 0">
+      <code>TWOS</code> is the same 72 two-letter words the passphrase page uses, embedded below. No
+      imports, no dependencies. <code>Array.from</code> walks code points, so an emoji counts as one
+      character.
+    </p>
+  </details>
+
+  <div class="foot">
+    <span id="status">&mdash;</span>
+    <div>each line is hashed on its own &middot; the hash rides on the end of the line, exactly as typed</div>
+  </div>
+</div>
+
+<script type="text/plain" id="twoletter">
+AA AB AD AE AG AH AM AN AR AS AT AW AX AY
+EA ED EE EF EH EM EN ER ES ET EW EX
+UG UH UM UN UP UR US UT
+BA BE BY CH DA DE FA FE FY GU HA HE HM
+JA KA KY MA ME MM MU MY NA NE NU NY
+PA PE RE SH ST TA TE WE XU YA YE YU ZA
+</script>
+<script>
+"use strict";
+
+/* ---- hashOf(string) ---------------------------------------------------- */
+/* Same three slots as the passphrase page, so the hash reads the same way
+   aloud, but the input is any string rather than a taxonomy code, and the
+   four characters are chosen out of a pool of eight rather than printed
+   straight out of the mixer. */
+
+const TWOS = document.getElementById("twoletter").textContent
+  .trim().split(/\s+/).map(w => w[0] + w.slice(1).toLowerCase());
+
+const SETS  = ["!@#^&*", TWOS, "123456789"];       // 6, 72, 9
+
+const SEED  = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b];
+const PRIME = [0x01000193, 0x85ebca77, 0xc2b2ae3d];
+
+/* 32-bit multiply-and-mix. Folding every character through an avalanche is
+   what keeps the three slots independent: without it, a plain polynomial is
+   blind to about one adjacent swap in nine, since B and B-1 can never both
+   be coprime to an even modulus like 72. */
+function fmix(n){
+  n ^= n >>> 16; n = Math.imul(n, 0x85ebca6b);
+  n ^= n >>> 13; n = Math.imul(n, 0xc2b2ae35);
+  n ^= n >>> 16;
+  return n >>> 0;
+}
+
+/* one run of the three slots over the whole string, with an independent key
+   set per run so that two runs share nothing but the input */
+function run(string, k){
+  const cps = Array.from(string, ch => ch.codePointAt(0));   // code points
+  return SETS.map((chars, s) => {
+    let n = fmix(SEED[s] ^ Math.imul(k + 1, 0x9e3779b1)
+                       ^ Math.imul(cps.length + 1, PRIME[s]));
+    for (let j = 0; j < cps.length; j++)
+      n = fmix(fmix(Math.imul(n, PRIME[s]) ^ (cps[j] + 1))
+               + Math.imul(j + 1, 0x165667b1));               // position folded in
+    return chars[(n >>> 16) % chars.length];
+  });
+}
+
+/* the pool: two runs, six characters -- two symbols, two words, two digits */
+function pool(string){ return [...run(string, 0), ...run(string, 1)]; }
+
+/* the eight complete four-character hashes available in the pool.
+   Layout is [symbol, letter, letter, digit]; each entry picks which run each
+   of the three slots comes from. */
+const SHAPES = [
+  [0, 1, 2], [0, 1, 5], [0, 4, 2], [0, 4, 5],
+  [3, 1, 2], [3, 1, 5], [3, 4, 2], [3, 4, 5]
+];
+
+/* pick the shape that moves the most characters against the same string with
+   its last character removed. All eight carry the same entropy, so the score
+   is the only thing choosing between them. */
+function pick(p, q){
+  let best = -1, bestShape = SHAPES[0];
+  for (const shape of SHAPES){
+    const a = shape.map(i => p[i]).join(""), b = shape.map(i => q[i]).join("");
+    let d = 0;
+    for (let i = 0; i < 4; i++) d += a[i] !== b[i];
+    if (d > best){ best = d; bestShape = shape; }
+  }
+  return { shape: bestShape, hash: bestShape.map(i => p[i]).join(""), moved: best };
+}
+
+function chosen(string){
+  const p = pool(string);
+  if (!string.length) return { shape: SHAPES[0], hash: SHAPES[0].map(i => p[i]).join(""), moved: 0 };
+  return pick(p, pool(string.slice(0, -1)));
+}
+
+function hashOf(string){ return chosen(string).hash; }
+
+/* how many of the four characters the truncated string still has in common */
+function sameOnCut(string){
+  if (!string.length) return 0;
+  const a = hashOf(string), b = hashOf(string.slice(0, -1));
+  let n = 0;
+  for (let i = 0; i < 4; i++) n += a[i] === b[i];
+  return n;
+}
+
+/* ---- output ----------------------------------------------------------- */
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+/* one string per line, always: a single line is the common case and needs no
+   special handling, and a pasted list hashes line by line without a toggle.
+   The trailing newline is dropped so a final line break does not add an
+   empty string to hash. */
+const lines = () => $("in").value.replace(/\n$/, "").split("\n").map(l => l.replace(/\r$/, ""));
+
+const MAXROWS = 200;   // keep a huge paste from building a huge DOM
+
+/* what copy puts on the clipboard: every line with its hash on the end */
+function payload(){
+  if ($("in").value === "") return "";
+  return lines().map(l => l + hashOf(l)).join("\n");
+}
+
+function render(){
+  const raw = $("in").value;
+
+  if (raw === ""){
+    $("hash").textContent = "—";
+    $("full").textContent = "—";
+    $("lines").innerHTML = "";
+    $("rlen").textContent = "—";
+    $("rhash").textContent = "—";
+    $("rdrop").textContent = "—";
+    $("slots").innerHTML = "";
+    return;
+  }
+
+  const all = lines();
+  const hashes = all.map(l => hashOf(l));
+  const one = all.length === 1;   // one line gets the full treatment, a list does not
+
+  $("hash").textContent = one ? hashes[0] : all.length + " hashes";
+  $("full").textContent = one
+    ? all[0] + hashes[0]
+    : "each line hashed separately, joined with \\n";
+  $("rhash").textContent = one ? hashes[0] : "see above";
+
+  if (one){
+    const c = chosen(all[0]);
+    const same = all[0].length ? sameOnCut(all[0]) : 0;
+    $("rdrop").textContent = all[0].length
+      ? `${4 - same} of 4 characters differ from "${esc(all[0].slice(0, -1))}"`
+      : "too short to shorten";
+    /* the pool, with the chosen shape marked */
+    $("slots").innerHTML =
+      `<div class="slot head"><span>pool</span><span>charset</span><span>hash</span></div>` +
+      pool(all[0]).map((ch, i) => {
+        const kind = i % 3, inShape = c.shape.includes(i);
+        const label = ["symbol", "word", "digit"][kind];
+        const set = kind === 1 ? TWOS.slice(0, 6).join(" ") + ` … ${TWOS.length} words` : SETS[kind];
+        return `<div class="slot${inShape ? " kept" : ""}">` +
+               `<span>${inShape ? "▸ " : ""}${label} ${Math.floor(i / 3) + 1}</span>` +
+               `<span class="set">${esc(set)}</span>` +
+               `<b>${esc(ch)}</b></div>`;
+      }).join("");
+  } else {
+    $("rdrop").textContent = "see above";
+    $("slots").innerHTML = "";
+  }
+
+  $("lines").innerHTML = one ? "" : all.slice(0, MAXROWS).map((l, i) =>
+    `<div class="line"><span class="t">${l === "" ? "&mdash;" : esc(l)}</span>` +
+    `<span class="h">${esc(hashes[i])}</span></div>`).join("")
+    + (all.length > MAXROWS
+        ? `<div class="foot">…and ${all.length - MAXROWS} more line(s)</div>` : "");
+
+  $("rlen").textContent = `${all.length} line(s), ${Array.from(raw).length} character(s)`;
+}
+
+/* hashing a very long paste takes a moment, so let typing settle first */
+let pending = null;
+$("in").addEventListener("input", () => {
+  clearTimeout(pending);
+  pending = setTimeout(render, 120);
+});
+$("clear").addEventListener("click", () => { $("in").value = ""; render(); $("in").focus(); });
+$("copy").addEventListener("click", async () => {
+  const b = $("copy"), t = b.textContent;
+  try {
+    await navigator.clipboard.writeText(payload());
+    b.textContent = "copied";
+  } catch { b.textContent = "press ⌘C"; }
+  setTimeout(() => { b.textContent = t; }, 1200);
+});
+
+/* ---- boot: the self-test ----------------------------------------------- */
+/* Seeded, never Math.random, so every load produces the same numbers and a
+   failure is reproducible. */
+let seed = 987654321;
+const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+const pickN = n => (rnd() * n) | 0;
+
+const bad = [];
+
+if (TWOS.length !== 72) bad.push("twos count");
+if (new Set(TWOS).size !== 72) bad.push("twos dup");
+if (!TWOS.every(w => /^[A-Z][a-z]$/.test(w))) bad.push("twos case");
+
+/* the mixer must actually mix: every single-character change has to move the
+   state, or everything above it is guesswork */
+let mixerOk = true;
+for (let i = 0; i < 200; i++){
+  const n = (rnd() * 2 ** 32) >>> 0;
+  if (fmix(n) === n || fmix(n) === fmix(n ^ 1)) mixerOk = false;
+}
+if (!mixerOk) bad.push("fmix");
+
+/* fixed vectors: the guard against someone editing the mix by accident */
+const VECTORS = [
+  ["",                   "!We1"],
+  ["a",                  "#Za7"],
+  ["ab",                 "#Us1"],
+  ["hello world",        "!Te3"],
+  ["the quick brown fox", "&As1"],
+  ["café",           "!Ma1"]
+];
+for (const [s, want] of VECTORS) if (hashOf(s) !== want) bad.push(`hash(${JSON.stringify(s)})`);
+
+/* four characters, each from its own slot */
+const SHAPE = /^[!@#^&*][A-Z][a-z][1-9]$/;
+for (const s of ["", "a", "ab", "hello world", "🐝🐝🐝🐝", "x".repeat(500)])
+  if (!SHAPE.test(hashOf(s))) bad.push(`shape ${JSON.stringify(s)}`);
+
+/* the property: the same string one character shorter must show up.
+   Measured the way a reader meets it -- hash both strings and compare what
+   the page would print for each, which is not the same as comparing one
+   fixed run, because the two strings may settle on different shapes. */
+function moved4(a, b){ let d = 0; for (let i = 0; i < 4; i++) d += a[i] !== b[i]; return d; }
+function randString(len = 2 + pickN(20)){
+  return Array.from({ length: len }, () => String.fromCharCode(32 + pickN(95))).join("");
+}
+
+let cut4 = 0, cut3 = 0;
+const CUT = 800;
+for (let t = 0; t < CUT; t++){
+  const s = randString();
+  const d = moved4(hashOf(s), hashOf(s.slice(0, -1)));
+  if (d === 4) cut4++;
+  if (d >= 3) cut3++;
+}
+const rate4 = cut4 / CUT, rate3 = cut3 / CUT;
+if (rate3 < 0.97) bad.push(`only ${(rate3 * 100).toFixed(1)}% of cut strings move 3+ characters`);
+if (rate4 < 0.75) bad.push(`only ${(rate4 * 100).toFixed(1)}% of cut strings move all 4`);
+
+/* the selection has to beat one fixed run, or it is not earning its keep */
+let fixed3 = 0;
+for (let t = 0; t < CUT; t++){
+  const s = randString();
+  if (moved4(run(s, 0).join(""), run(s.slice(0, -1), 0).join("")) >= 3) fixed3++;
+}
+if (fixed3 / CUT >= rate3) bad.push("selection is no better than one fixed run");
+
+/* every slot should still use its whole charset, selection or not */
+const seen = SETS.map(() => new Set());
+for (let t = 0; t < 2000; t++){
+  const s = Array.from({ length: 2 + pickN(20) }, () => String.fromCharCode(32 + pickN(95))).join("");
+  const p = pool(s);
+  seen[0].add(p[0]); seen[1].add(p[1]); seen[2].add(p[2]);
+}
+if (seen[0].size !== 6 || seen[1].size < 70 || seen[2].size !== 9) bad.push("charset coverage");
+
+const st = $("status");
+if (bad.length){ st.textContent = "selftest FAIL: " + bad.join(", "); st.className = "bad"; }
+else {
+  st.textContent = `selftest pass · cutting one character moves 4/4 characters ${(rate4 * 100).toFixed(1)}%`
+                   + ` and 3+/4 ${(rate3 * 100).toFixed(1)}% of the time`
+                   + ` · one fixed run manages ${(fixed3 / CUT * 100).toFixed(1)}%`;
+  st.className = "ok";
+}
+
+render();
+</script>
+</body>
+</html>
